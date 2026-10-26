@@ -1,6 +1,7 @@
 import { MODULE_ID } from '../system/constants';
 import DHDeck from './deck';
 import HandInteractions from './hand-interactions';
+import { getHUDActor } from '../system/actor-selection';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -10,413 +11,287 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     interactions = null;
     #listeners = new AbortController();
     #dragData = null;
-    #isCollapsed = false;
-    isVault = false;
-    isEquipment = false;
+    #actor = null;
+    #token = null;
+    #target = null;
+    #switchPromise = null;
+    #actorAnimation = null;
+    #selectionVersion = 0;
+    #deckVersion = 0;
+    #needsRefresh = false;
+    #closed = false;
+    #selectionChanged = null;
 
     static DEFAULT_OPTIONS = {
         id: 'dh-card-deck',
         tag: 'div',
-        classes: [
-            'daggerheart',
-            'dh-style',
-            'dh-card-deck'
-        ],
-        position: {
-            width: 'auto',
-            height: 'auto'
-        },
-        window: {
-            frame: false,
-            positioned: false,
-            resizable: false
-        },
-        actions: {
-            toggleVault: this.#toggleVault,
-            toggleEquipment: this.#toggleEquipment,
-            toggleHUD: this.#toggleHUD,
-            toggleMenu: this.#toggleMenu,
-            toggleItemType: this.#toggleItemType,
-            useCard: this.#useCard,
-            sendToVault: this.#sendToVault,
-            sendToLoadout: this.#sendToLoadout,
-            recall: this.#recall,
-            sendToChat: this.#sendToChat,
-            editItem: this.#editItem,
-            cancelBeastform: this.#cancelBeastform,
-            copyUuid: this.#copyUuid,
-            toggleEquipped: this.#toggleEquipped
-        }
+        classes: ['daggerheart', 'dh-style', 'dh-card-deck'],
+        position: { width: 'auto', height: 'auto' },
+        window: { frame: false, positioned: false, resizable: false },
+        actions: { useCard: this.#useCard }
     };
 
     static PARTS = {
-        deck: {
-            template: 'modules/daggerheart-card-deck-hud/templates/deck.hbs'
-        },
-        controls: {
-            template: 'modules/daggerheart-card-deck-hud/templates/controls.hbs'
-        }
+        deck: { template: 'modules/daggerheart-card-deck-hud/templates/deck.hbs' }
     };
-
-    #actor = null;
-    #token = null;
-
-    constructor(options = {}) {
-        super(options);
-    }
 
     static async create() {
         if (this.instance) return this.instance;
-
         const hud = new this();
         this.instance = hud;
-
-        await hud.render({force: true});
-        hud.element.setAttribute('hidden', '');
-
-        const token = canvas.tokens?.controlled[0];
-
-        if (token?.actor) hud.setActor(token.actor, token);
+        await hud.render({ force: true });
+        hud.element.hidden = true;
+        const { actor, token } = getHUDActor();
+        await hud.setActor(actor, token);
+        return hud;
     }
 
     static async destroy() {
         if (!this.instance) return;
-
         const instance = this.instance;
         this.instance = null;
         await instance.close({ animate: false });
     }
 
     async _onClose(options) {
+        this.#closed = true;
+        this.#selectionVersion++;
+        this.#deckVersion++;
+        this.#actorAnimation?.cancel();
+        this.#selectionChanged?.();
         this.interactions?.dispose();
         this.#listeners.abort();
         document.removeEventListener('pointermove', this.#onDragMove);
         document.removeEventListener('pointerup', this.#onDragEnd);
         await super._onClose(options);
-
         if (DHCardDeckHUD.instance === this) DHCardDeckHUD.instance = null;
     }
 
-    get actor() {
-        return this.#actor;
-    }
-
-    get token() {
-        return this.#token;
-    }
-
-    get isCharacter() {
-        return this.actor.type === 'character';
-    }
+    get actor() { return this.#actor; }
+    get token() { return this.#token; }
+    get requestedActor() { return this.#target ? this.#target.actor : this.#actor; }
+    get isSwitchingActors() { return this.element?.classList.contains('is-switching-actors') ?? false; }
+    get isCharacter() { return this.actor?.type === 'character'; }
+    get isVault() { return this.isCharacter && game.settings.get(MODULE_ID, 'handView') === 'vault'; }
+    get isEquipment() { return this.isCharacter && game.settings.get(MODULE_ID, 'handView') === 'equipment'; }
 
     get cardWidth() {
-        return 10 * parseFloat(getComputedStyle(document.documentElement).fontSize) * (game.settings.get(MODULE_ID, 'cardWidth') / 5);
+        const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        return 10 * fontSize * (game.settings.get(MODULE_ID, 'cardWidth') / 5);
     }
 
-    /** @override */
     async _insertElement(element, options) {
         const uiBottom = document.querySelector('#ui-bottom');
         const uiRight = document.querySelector('#ui-right-column-1');
         const positionSetting = game.settings.get(MODULE_ID, 'deckPosition');
-
         switch (positionSetting) {
             case 'center':
-                if (uiBottom) {
-                    uiBottom.prepend(element);
-                    return;
-                }
-                break;    
+                if (uiBottom) { uiBottom.prepend(element); return; }
+                break;
             case 'right':
                 if (uiRight) uiRight.appendChild(element);
                 break;
-            case 'custom':
+            case 'custom': {
                 const position = game.settings.get(MODULE_ID, 'deckCustomPosition');
                 element.style.left = `${position.left ?? 0}px`;
                 element.style.top = `${position.top ?? 0}px`;
                 break;
+            }
         }
-
         element.classList.add('alternate-positioning', `position-${positionSetting}`);
-
         return super._insertElement(element, options);
     }
 
     async _onFirstRender(context, options) {
-        await super._onFirstRender(context, options);        
-
+        await super._onFirstRender(context, options);
         this.element.style.setProperty('--card-width', `${this.cardWidth}px`);
         this.setLockPosition();
         this.interactions = new HandInteractions(this);
-
-        ['click', 'contextmenu'].forEach(eventType => {
-            document.addEventListener(eventType, event => {
-                if (this.deck?.cards) this._selectCard();
-                if (!this.parts.controls.hasAttribute('data-menu-open') || event.target.closest('.dh-cd-control-settings-menu')) return;
-                this._toggleMenu(event);
-            }, { signal: this.#listeners.signal });
-        });
+        const listeners = { signal: this.#listeners.signal };
+        this.element.addEventListener('pointerdown', this.#onDragStart, listeners);
+        this.element.addEventListener('contextmenu', async event => {
+            const wrapper = event.target.closest('.dh-card-wrapper');
+            const card = this.deck?.cards.get(wrapper?.dataset.cardId);
+            if (!card) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (this.isSwitchingActors) return;
+            await card.openDocument();
+        }, listeners);
+        document.addEventListener('click', () => this._selectCard(), listeners);
     }
 
     async _onRender(context, options) {
         await super._onRender(context, options);
         if (!this.#actor) return;
-
         if (options.parts?.includes('deck')) {
             this.interactions?.reset();
             this.parts.deck.replaceChildren(...[...this.deck.cards.values()].map(card => card.element));
             this.deck._setDeckSize();
-
-            for (const card of this.deck.cards.values()) {
-                card.element.addEventListener('contextmenu', event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    
-                    if (event.target.closest('button[data-action="copyUuid"]')) {
-                        const label = _loc(card.item.constructor.metadata.label);
-                        game.clipboard.copyPlainText(card.item.id);
-                        return ui.notifications.info('DOCUMENT.IdCopiedClipboard', {format: {label, type: 'ID', id: card.item.id}});
-                    }
-
-                    this._selectCard(card);
-                    if (this.parts.controls.hasAttribute('data-menu-open')) this._toggleMenu(event);
-                });
-                
-                card.element.addEventListener('transitionend', event => {
-                    if (event.target !== card.element || event.propertyName !== 'transform') return;
-                    if (card.selected) card.element.classList.add('show-actions');
-                });
-            }
             this.deck.applyGradient(game.settings.get(MODULE_ID, 'cardGradient'));
             this.deck.setVarStyle();
         }
-
         this.interactions?.refresh();
-
         this.updateMarginPosition();
-
-        if (options.parts?.includes('controls')) {
-            const menu = this.parts.controls.querySelector('.dh-cd-control-settings-menu');
-
-            let dragged = null;
-
-            menu.addEventListener('dragstart', event => {
-                dragged = event.target.closest('label');
-            });
-
-            menu.addEventListener('dragover', event => {
-                event.preventDefault();
-
-                const target = event.target.closest('label');
-
-                if (!target || target === dragged) return;
-
-                const rect = target.getBoundingClientRect();
-                const after = event.clientY > rect.top + rect.height / 2;
-
-                menu.insertBefore(
-                    dragged,
-                    after ? target.nextSibling : target
-                );
-            });
-
-            menu.addEventListener('dragend', async () => {
-                dragged = null;
-
-                await this._saveItemTypes();
-                await this.deck.createCards();
-                await this.render({ parts: ['deck'] });
-            });
-
-            const settingsButton = this.element.querySelector('[data-action=\'toggleMenu\']');
-            if (settingsButton) settingsButton.addEventListener('contextmenu', this._toggleMenu.bind(this));
-
-            const moveButton = this.element.querySelector('.dh-cd-control-move');
-            if (moveButton) {
-                moveButton.addEventListener('pointerdown', this.#onDragStart);
-                moveButton.addEventListener('contextmenu', event => {
-                    const lockSetting = game.settings.get(MODULE_ID, 'lockPosition');
-                    game.settings.set(MODULE_ID, 'lockPosition', !lockSetting);
-                });
-            }
-        }
-
-        // Test Animation Cards Reveal
-        /* deckElement.replaceChildren();
-
-        for (const card of this.deck.cards) {
-            deckElement.append(card.element);
-
-            await new Promise(resolve => setTimeout(resolve, 20));
-        } */
     }
 
-    updateMarginPosition({ deckBorderMargin, deckBottomMargin, deckBetweenMargin } = {}) {
+    updateMarginPosition({ deckBorderMargin, deckBottomMargin } = {}) {
         if (!this.element) return;
         deckBorderMargin ??= game.settings.get(MODULE_ID, 'deckBorderMargin');
         deckBottomMargin ??= game.settings.get(MODULE_ID, 'deckBottomMargin');
-        deckBetweenMargin ??= game.settings.get(MODULE_ID, 'deckBetweenMargin');
         this.element.style.setProperty('--borderMargin', `${deckBorderMargin}px`);
         this.element.style.setProperty('--bottomMargin', `${deckBottomMargin}px`);
-        this.element.style.setProperty('--betweenMargin', `${deckBetweenMargin}px`);
     }
 
     setLockPosition() {
-        this.element.setAttribute('data-lock-position', game.settings.get(MODULE_ID, 'lockPosition'));
+        this.element?.setAttribute('data-lock-position', game.settings.get(MODULE_ID, 'lockPosition'));
     }
 
     async setActor(actor, token = null) {
-        this.#actor = actor;
-        this.#token = token;
-        this.isVault = false;
-        this.isEquipment = false;
-
-        this.element.removeAttribute('hidden');
-        
-        await this.createDeck();
+        if (this.#closed) return;
+        actor ??= null;
+        const sameActor = (a, b) => (a?.uuid ?? a?.id) === (b?.uuid ?? b?.id);
+        if (!this.#switchPromise && sameActor(actor, this.#actor)) {
+            this.#target = { actor, token };
+            this.#token = token;
+            if (actor && actor !== this.#actor) {
+                this.#actor = actor;
+                await this.createDeck();
+            }
+            return;
+        }
+        if (this.#switchPromise && actor === this.#target.actor) {
+            this.#target.token = token;
+            return this.#switchPromise;
+        }
+        this.#target = { actor, token };
+        this.#selectionVersion++;
+        this.#deckVersion++;
+        this.#selectionChanged?.();
+        if (!this.#switchPromise) {
+            this.#switchPromise = this.#switchActor().finally(async () => {
+                this.#actorAnimation?.cancel();
+                this.#actorAnimation = null;
+                this.#selectionChanged = null;
+                this.element.classList.remove('is-switching-actors');
+                this.#switchPromise = null;
+                if (this.#closed) return;
+                this.interactions?.refresh();
+                if (this.#needsRefresh && this.#actor) {
+                    this.#needsRefresh = false;
+                    await this.createDeck();
+                }
+            });
+        }
+        return this.#switchPromise;
     }
 
     async clearActor() {
-        this.interactions?.reset();
-        this.#isCollapsed = false;
-        this.element.classList.remove('is-hidden');
-        this.#actor = null;
-        this.#token = null;
-        this.deck = null;
+        return this.setActor(null);
+    }
 
-        this.element.setAttribute('hidden', '');
-        this.element.replaceChildren();
+    async #switchActor() {
+        const hand = this.parts.deck;
+        const rect = hand?.getBoundingClientRect();
+        const from = hand ? getComputedStyle(hand).transform : 'none';
+        const visible = !this.element.hidden && this.deck?.size && rect?.bottom > 0 && rect.top < window.innerHeight;
+        this.element.classList.add('is-switching-actors');
+        this.interactions?.reset();
+        if (visible) await this.#slideHand('out', from);
+        while (!this.#closed) {
+            const target = this.#target;
+            const version = this.#selectionVersion;
+            if (!target.actor) {
+                this.#actor = null;
+                this.#token = null;
+                this.deck = null;
+                this.element.hidden = true;
+                this.element.replaceChildren();
+                return;
+            }
+            let invalidate;
+            const changed = new Promise(resolve => { invalidate = () => resolve(null); });
+            this.#selectionChanged = invalidate;
+            const deck = await Promise.race([DHDeck.create(target.actor, this), changed]);
+            if (this.#selectionChanged === invalidate) this.#selectionChanged = null;
+            if (this.#closed) return;
+            if (!deck || version !== this.#selectionVersion) continue;
+            this.#actor = target.actor;
+            this.#token = target.token;
+            this.deck = deck;
+            this.#needsRefresh = false;
+            this.element.hidden = false;
+            await this.render({ parts: ['deck'] });
+            if (this.#closed) return;
+            if (version !== this.#selectionVersion) continue;
+            await this.#slideHand('in');
+            if (this.#closed) return;
+            if (target.actor === this.#target.actor) {
+                this.#token = this.#target.token;
+                return;
+            }
+            await this.#slideHand('out');
+        }
+    }
+
+    async #slideHand(direction, from) {
+        this.#actorAnimation?.cancel();
+        this.#actorAnimation = null;
+        const hand = this.parts.deck;
+        if (!hand || !this.deck?.size || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const rect = hand.getBoundingClientRect();
+        const current = new DOMMatrixReadOnly(from ?? getComputedStyle(hand).transform).m42;
+        const offset = Math.max(window.innerHeight - rect.top + 24, rect.height + 24, current);
+        const hidden = { transform: `translateY(${offset}px)`, opacity: 0 };
+        const visible = { transform: 'translateY(0px)', opacity: 1 };
+        const frames = direction === 'out' ? [{ transform: from ?? visible.transform, opacity: 1 }, hidden]
+            : [hidden, visible];
+        const animation = this.#actorAnimation = hand.animate(frames, {
+            duration: direction === 'out' ? 240 : 280,
+            easing: direction === 'out' ? 'ease-in' : 'ease-out',
+            fill: 'forwards'
+        });
+        animation.id = `dh-hand-${direction}`;
+        try { await animation.finished; }
+        catch (error) { if (error.name !== 'AbortError') throw error; }
     }
 
     async createDeck() {
+        if (this.#closed) return;
+        if (this.#switchPromise) {
+            this.#selectionVersion++;
+            this.#needsRefresh = true;
+            this.#selectionChanged?.();
+            return this.#switchPromise;
+        }
+        if (!this.#actor) return;
+        const actor = this.#actor;
+        const version = ++this.#deckVersion;
         this.interactions?.reset();
-        this.deck = await DHDeck.create(this.#actor, this);
-        await this.render({ parts: ['deck', 'controls'] });
-    }
-
-    /* -------------------------------------------- */
-
-    /** @override */
-    async _preparePartContext(partId, context, options) {
-        context = await super._preparePartContext(partId, context, options);
-        if (!this.#actor) return context;
-        switch (partId) {
-            case 'deck': return this._prepareDeckContext(context, options);
-            case 'controls': return this._prepareControlsContext(context, options);
-        }
-        return context;
-    }
-
-    _prepareDeckContext(context, options) {
-        if (!this.#actor) return context;
-        context.classes = this.deck.classes;
-        context.cardCount = this.deck.cards.size;
-        context.cardOverlap = game.settings.get(MODULE_ID, 'cardOverlap') ?? 55;
-        return context;
-    }
-
-    _prepareControlsContext(context, options) {
-        context.itemTypes = this.deck.itemTypes;
-        context.isFreePositioning = game.settings.get(MODULE_ID, 'deckPosition') === 'custom';
-        context.isCharacter = this.isCharacter;
-        context.characterType = this.#actor.type;
-        if (this.isCharacter) {
-            context.isVault = this.isVault;
-            context.isEquipment = this.isEquipment;
-            context.hasVaultCards = this.#actor.system.domainCards.vault.length > 0;
-            context.hasEquipmentCards = this.#actor.items.filter(item => item.system.equipped === false).length > 0;
-        }
-        return context;
-    }
-
-    static async #toggleVault() {
-        this.isVault = !this.isVault;
-        await this.deck.createCards();
-        await this.render({ parts: ['deck', 'controls'] });
-    }
-
-    static async #toggleEquipment() {
-        this.isEquipment = !this.isEquipment;
-        await this.deck.createCards();
-        await this.render({ parts: ['deck', 'controls'] });
-    }
-
-    static async #toggleHUD() {
-        this.interactions?.reset();
-        this.#isCollapsed = !this.#isCollapsed;
-
-        const deck = this.parts.deck;
-        const marginSetting = game.settings.get(MODULE_ID, 'deckBottomMargin');
-        let offset = '0px';
-
-        if (!deck) return;
-
-        if (this.#isCollapsed) {
-            const rect = deck.getBoundingClientRect();
-            const transform = new DOMMatrixReadOnly(getComputedStyle(deck).transform);
-            offset = `calc(${window.innerHeight - rect.top + transform.m42}px + 1rem + ${marginSetting}px)`;
-        }
-
-        deck.style.setProperty('--dh-cd-hide-offset', offset);
-
-        this.element.classList.toggle('is-hidden', this.#isCollapsed);
-        this.interactions?.schedule();
-    }
-
-    static async #toggleMenu(event) {
-        this._toggleMenu(event);
-    }
-
-    async _toggleMenu(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        this.parts.controls.toggleAttribute('data-menu-open');
-        this.interactions?.reveal();
-        this.interactions?.schedule();
-    }
-
-    static async #toggleItemType(event, target) {
-        const type = target.dataset.type;
-        const itemType = this.deck.itemTypes.find(item => item.type === type);
-
-        if (!itemType) return;
-
-        itemType.active = !itemType.active;
-
-        this._saveItemTypes();
-        await this.deck.createCards();
+        const deck = await DHDeck.create(actor, this);
+        if (this.#closed || version !== this.#deckVersion || actor !== this.#actor || this.#switchPromise) return;
+        this.deck = deck;
         await this.render({ parts: ['deck'] });
     }
 
-    async _saveItemTypes() {
-        const itemTypes = [...this.parts.controls.querySelectorAll('.dh-cd-control-settings-menu label')]
-            .map(label => ({
-                type: label.dataset.type,
-                active: label.querySelector('input[type="checkbox"]').checked
-            }));
-
-        this.deck.itemTypes = itemTypes;
-
-        await game.settings.set(MODULE_ID, this.deck.itemTypesSetting, itemTypes);
+    async _preparePartContext(partId, context, options) {
+        context = await super._preparePartContext(partId, context, options);
+        if (partId === 'deck' && this.#actor) context.classes = this.deck.classes;
+        return context;
     }
 
     static #useCard(event, target) {
         event.stopPropagation();
-        const { cardId } = target.closest('[data-card-id]').dataset;
-        const card = this.deck.cards.get(cardId);
-
+        if (this.isSwitchingActors) return;
+        const card = this.deck?.cards.get(target.closest('[data-card-id]')?.dataset.cardId);
+        if (!card) return;
         if (!card.isLocked && this.isEquipment && card.item.system.equipped === false) return card.toggleEquipped();
         if (!card.isLocked && (!game.settings.get(MODULE_ID, 'directAction') || card.selected)) return card.use(event);
         this._selectCard(card);
     }
 
-    static #toggleEquipped(event, target) {
-        const { cardId } = target.closest('[data-card-id').dataset;
-        const card = this.deck.cards.get(cardId);
-        if (!card.isLocked) return card.toggleEquipped();
-    }
-
     _selectCard(card) {
-        if (!this.deck) return;
+        if (!this.deck || this.isSwitchingActors) return;
         let changed = Boolean(card);
         if (card) card.toggleSelected();
         for (const otherCard of this.deck.cards.values()) {
@@ -431,138 +306,38 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         }
     }
 
-    static _unselectCard(event, force = false) {
-        const selectedCard = DHCardDeckHUD.instance.element.querySelector('.dh-card.selected');
-        if ((selectedCard && !selectedCard.contains(event.target)) || force) {
-            DHCardDeckHUD.instance.element.querySelectorAll('.dh-card.selected')
-                .forEach(c => {
-                    c.classList.remove('show-actions');
-                    c.classList.remove('selected');
-                });
-        }
-    }
-
-    static async #sendToVault(event, target) {
-        const { itemId } = target.closest('[data-item-id').dataset;
-        const item = fromUuidSync(itemId);
-        if (!item && !(typeof item.system?.toggleVault === 'function')) return;
-        await item.system.toggleVault(event, true, false);
-    }
-
-    static async #sendToLoadout(event, target) {
-        const { itemId } = target.closest('[data-item-id').dataset;
-        const item = fromUuidSync(itemId);
-        if (!item && !(typeof item.system?.toggleVault === 'function')) return;
-        await item.system.toggleVault(event, false, false);
-    }
-
-    static async #recall(event, target) {
-        const { itemId } = target.closest('[data-item-id').dataset;
-        const item = fromUuidSync(itemId);
-        if (!item && !(typeof item.system?.toggleVault === 'function')) return;
-        await item.system.toggleVault(event, false, true);
-    }
-
-    static #sendToChat(event, target) {
-        event.preventDefault();
-        event.stopPropagation();
-        const { itemId } = target.closest('[data-item-id').dataset;
-        const item = fromUuidSync(itemId);
-        if (!item) return;
-        item.toChat(item.uuid);
-    }
-
-    static #editItem(event, target) {
-        const card = target.closest('[data-item-id');
-        const { itemId } = card.dataset;
-        const item = fromUuidSync(itemId);
-        if (!item) return;
-        item.sheet.render({ force: true });
-        card.classList.remove('show-actions');
-        card.classList.remove('selected');
-    }
-
-    static #cancelBeastform(event, target) {
-        const card = target.closest('[data-item-id');
-        const { itemId } = card.dataset;
-        const item = fromUuidSync(itemId);
-        if (!item) return;
-        item.delete();
-    }
-
-    static #copyUuid(event, target) {
-        event.preventDefault();
-        event.stopPropagation();
-        const { itemId } = target.closest('[data-item-id').dataset;
-        const item = fromUuidSync(itemId);
-        if (!item) return;
-        const label = _loc(item.constructor.metadata.label);
-        game.clipboard.copyPlainText(item.uuid);
-        ui.notifications.info('DOCUMENT.IdCopiedClipboard', {format: {label, type: 'UUID', id: item.uuid}});
-    }
-
     #onDragStart = event => {
-        if (game.settings.get(MODULE_ID, 'lockPosition')) return;
-        
+        if (!event.altKey || event.button !== 0 || !event.target.closest('.dh-card-wrapper')
+            || this.isSwitchingActors
+            || game.settings.get(MODULE_ID, 'deckPosition') !== 'custom'
+            || game.settings.get(MODULE_ID, 'lockPosition')) return;
         event.preventDefault();
-
+        event.stopPropagation();
+        this.interactions?.reset();
         this.element.setAttribute('data-dragging', '');
         const rect = this.element.getBoundingClientRect();
-
-        this.#dragData = {
-            startX: event.clientX,
-            startY: event.clientY,
-            left: rect.left,
-            top: rect.top
-        };
-
+        this.#dragData = { startX: event.clientX, startY: event.clientY, left: rect.left, top: rect.top };
         document.addEventListener('pointermove', this.#onDragMove);
         document.addEventListener('pointerup', this.#onDragEnd, { once: true });
-    }
+    };
 
     #onDragMove = event => {
         if (!this.#dragData) return;
+        const { startX, startY, left, top } = this.#dragData;
+        const maxLeft = Math.max(0, window.innerWidth - this.element.offsetWidth);
+        const maxTop = Math.max(0, window.innerHeight - this.element.offsetHeight);
+        this.element.style.left = `${Math.min(Math.max(0, left + event.clientX - startX), maxLeft)}px`;
+        this.element.style.top = `${Math.min(Math.max(0, top + event.clientY - startY), maxTop)}px`;
+    };
 
-        const {
-            startX,
-            startY,
-            left,
-            top
-        } = this.#dragData;
-
-        const dx = event.clientX - startX;
-        const dy = event.clientY - startY;
-
-        const width = this.element.offsetWidth;
-        const height = this.element.offsetHeight;
-
-        const newLeft = Math.min(
-            Math.max(0, left + dx),
-            window.innerWidth - width
-        );
-
-        const newTop = Math.min(
-            Math.max(0, top + dy),
-            window.innerHeight - height
-        );
-
-        this.element.style.left = `${newLeft}px`;
-        this.element.style.top = `${newTop}px`;
-    }
-
-    #onDragEnd = async event => {
+    #onDragEnd = async () => {
         this.element.removeAttribute('data-dragging');
         document.removeEventListener('pointermove', this.#onDragMove);
-
         if (!this.#dragData) return;
-
-        const rect = this.element.getBoundingClientRect();
-
-        await game.settings.set(MODULE_ID, 'deckCustomPosition', {
-            left: rect.left,
-            top: rect.top
-        });
-
         this.#dragData = null;
-    }
+        this.interactions?.suppressNextClick();
+        const rect = this.element.getBoundingClientRect();
+        await game.settings.set(MODULE_ID, 'deckCustomPosition', { left: rect.left, top: rect.top });
+        this.interactions?.schedule();
+    };
 }

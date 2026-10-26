@@ -61,8 +61,9 @@ export default class DHDeck {
         const items = [];
         
         if (this.actor.type === 'character') {
-            if (this.parent.isEquipment) return this.actor.items.filter(item => item.system.equipped === false);
-            if (this.parent.isVault) return this.actor.system.domainCards.vault;
+            const view = game.settings.get(MODULE_ID, 'handView');
+            if (view === 'equipment') return this.actor.items.filter(item => item.system.equipped === false);
+            if (view === 'vault') return this.actor.system.domainCards.vault;
 
             const isBeastform = this.actor.system.activeBeastform;
 
@@ -251,7 +252,7 @@ export default class DHDeck {
 
     getCardStyle(count, card, frontCardPosition = 'last') {
         const index = card.index;
-        const spacing = this.element.dataset.cardOverlap || game.settings.get(MODULE_ID, 'cardOverlap') || 55;
+        const spacing = this.element?.dataset.cardOverlap || game.settings.get(MODULE_ID, 'cardOverlap') || 55;
         const curvature = game.settings.get(MODULE_ID, 'deckStyle') === 'flat' ? 0
             : game.settings.get(MODULE_ID, 'deckCurvature') / 100;
         const maxRotation = 14 * curvature;
@@ -294,15 +295,20 @@ export default class DHDeck {
     }
 
     _getItemTypes() {
-        const typesSetting = game.settings.get('daggerheart-card-deck-hud', this.itemTypesSetting);
-        const defaultOrder = typesSetting.length ? typesSetting : this._getItemTypesDefaultOrder().map(type => ({ type, label: _loc(this._getTypeLabel(type)), active: !['loot', 'consumable'].includes(type) })).sort((a, b) => a.label.localeCompare(b.label));
+        return DHDeck.getItemTypes(this.actor.type);
+    }
+
+    static getItemTypes(actorType = 'character') {
+        const setting = actorType === 'character' ? 'itemTypes' : 'itemTypesNPC';
+        const typesSetting = game.settings.get(MODULE_ID, setting);
+        const defaults = this.getDefaultItemTypes(actorType);
+        const defaultOrder = typesSetting.length ? typesSetting : defaults;
         const typesMap = new Map(defaultOrder.map(item => [item.type, item]));
 
-        const itemTypes = this._getItemTypesDefaultOrder()
-            .map(type => ({
-                type,
-                label: _loc(this._getTypeLabel(type)),
-                active: typesMap.get(type)?.active ?? type !== 'loot'
+        const itemTypes = defaults
+            .map(item => ({
+                ...item,
+                active: typesMap.get(item.type)?.active ?? item.active
             }));
 
         itemTypes.sort((a, b) => {
@@ -316,16 +322,19 @@ export default class DHDeck {
         return itemTypes;
     }
 
-    _getItemTypesDefaultOrder() {
-        if (this.actor.type !== 'character') return ['feature', 'potentialAdversaries', 'weapon'];
-        const knownTypes = ['ancestry', 'community', 'class', 'subclass', 'domainCard', 'beastform', 'consumable', 'loot', 'armor', 'weapon'];
-        knownTypes.push(...Item.TYPES.filter(type => !knownTypes.includes(type) && !['base', 'feature'].includes(type)));
-        return knownTypes;
-    }
-
-    _getTypeLabel(type) {
-        if (type === 'potentialAdversaries') return 'DAGGERHEART.GENERAL.Tabs.potentialAdversaries';
-        return `TYPES.Item.${type}`;
+    static getDefaultItemTypes(actorType = 'character') {
+        const types = actorType === 'character'
+            ? ['ancestry', 'community', 'class', 'subclass', 'domainCard', 'beastform', 'consumable', 'loot', 'armor', 'weapon']
+            : ['feature', 'potentialAdversaries', 'weapon'];
+        if (actorType === 'character') {
+            types.push(...Item.TYPES.filter(type => !types.includes(type) && !['base', 'feature'].includes(type)));
+        }
+        return types.map(type => ({
+            type,
+            label: _loc(type === 'potentialAdversaries'
+                ? 'DAGGERHEART.GENERAL.Tabs.potentialAdversaries' : `TYPES.Item.${type}`),
+            active: !['loot', 'consumable'].includes(type)
+        })).sort((a, b) => a.label.localeCompare(b.label));
     }
 
     _setDeckSize() {

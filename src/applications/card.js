@@ -29,10 +29,6 @@ export default class DHCard {
 
         this.#selected = value;
         this.element?.classList.toggle('selected', value);
-        if (value && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            this.element?.classList.add('show-actions');
-        }
-        if (!value) this.element?.classList.remove('show-actions');
     }
 
     get actor() {
@@ -78,10 +74,9 @@ export default class DHCard {
         wrapper.setAttribute('data-action', 'useCard');
         wrapper.setAttribute('data-locked', !!this.isLocked);
 
-        const buttons = await this.addButtons();
         const hoverLayout = this.addHoverLayout();
 
-        wrapper.append(card, ...(this.item.noButton === true ? [] : buttons), hoverLayout);
+        wrapper.append(card, hoverLayout);
 
         return wrapper;
     }
@@ -256,18 +251,16 @@ export default class DHCard {
         return descContainer.innerHTML;
     }
 
-    async addButtons() {
-        const buttonsContext = { type: this.item.type, inVault: this.item.system.inVault };
-        if (foundry.utils.hasProperty(this.item.system, 'equipped')) buttonsContext.equipped = this.item.system.equipped;
-        const buttonsContent = await foundry.applications.handlebars.renderTemplate(
-            'modules/daggerheart-card-deck-hud/templates/card-buttons.hbs',
-            buttonsContext
-        );
+    get sourceDocument() {
+        if (this.item.sheet) return this.item;
+        const ownedItem = this.actor.items?.get?.(this.item.id);
+        if (ownedItem) return ownedItem;
+        const document = this.item.uuid?.includes('.') ? fromUuidSync(this.item.uuid) : null;
+        return document ?? this.actor;
+    }
 
-        const buttonsContainer = document.createElement('div');
-        buttonsContainer.innerHTML = buttonsContent;
-
-        return buttonsContainer.children;
+    async openDocument() {
+        return this.sourceDocument?.sheet?.render({ force: true });
     }
 
     addHoverLayout() {
@@ -307,19 +300,43 @@ export default class DHCard {
         this.selected = !this.selected;
     }
 
+    #hasActions(item) {
+        const actions = item.system?.actionsList ?? item.system?.actions;
+        return Boolean(actions?.size || actions?.length);
+    }
+
+    async #sendToChat() {
+        // Subclass rank cards wrap item data rather than the original Item document.
+        const item = typeof this.item.toChat === 'function' ? this.item : this.actor.items?.get?.(this.item.id);
+        if (typeof item?.toChat === 'function') return item.toChat(item.uuid);
+
+        // Synthetic cards, such as beastforms, have no Item chat method: share their visible embed.
+        const content = this.element.querySelector('.dh-card').cloneNode(true);
+        content.querySelectorAll('.secret').forEach(element => element.remove());
+        const messageClass = getDocumentClass('ChatMessage');
+        return messageClass.create({
+            speaker: messageClass.getSpeaker({ actor: this.actor }),
+            content: content.outerHTML
+        });
+    }
+
     async use(event) {
-        if (this.item.system?.actionsList) await this.item.use(event);
-        else if (this.item.id === this.actor.system.attack?.id) await this.actor.system.attack.use(event);
+        const customAction = this.item.noButton && typeof this.item.use === 'function';
+        if (typeof this.item.use === 'function' && (this.#hasActions(this.item) || customAction)) {
+            await this.item.use(event);
+        } else if (this.actor.system.attack && this.item.id === this.actor.system.attack.id) {
+            await this.actor.system.attack.use(event);
+        }
         else {
-            const count = this.features.reduce((acc, feature) => acc + (feature.system.actions.size > 0 ? 1 : 0), 0);
-            if (count) {
-                let feature = this.features.find(f => f.system.actions.size);
-                if (count > 1 && !event?.shiftKey) {
+            const features = this.features.filter(feature => this.#hasActions(feature));
+            if (features.length) {
+                let feature = features[0];
+                if (features.length > 1 && !event?.shiftKey) {
                     // Feature Selection Dialog
                     feature = await FeatureSelectionDialog.create(this, event);
                 }
                 if (feature) await feature.use(event);
-            } else ui.notifications.warn('DHDECKCARD.ERRORS.NoUse', { localize: true });
+            } else await this.#sendToChat();
         }
 
         if (this.selected) this.selected = false;

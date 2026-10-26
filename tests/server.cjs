@@ -5,7 +5,8 @@ const less = require('less');
 
 async function start() {
     const script = await esbuild.build({
-        entryPoints: ['tests/fixture.js'], bundle: true, format: 'esm', write: false
+        entryPoints: ['tests/fixture.js'], bundle: true, format: 'esm', write: false,
+        loader: { '.hbs': 'text' }
     });
     const source = await fs.readFile('src/styles/daggerheart-card-deck-hud.less', 'utf8');
     const style = await less.render(source);

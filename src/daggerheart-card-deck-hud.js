@@ -2,6 +2,7 @@ import { DHCardDeckHUD } from './applications/daggerheart-card-deck-hud';
 import { registerSettings } from './system/settings';
 import { preloadHandlebarsTemplates } from './system/handlebars';
 import { MODULE_ID } from './system/constants';
+import { getHUDActor } from './system/actor-selection';
 
 Hooks.once('init', async () => {
     preloadHandlebarsTemplates();
@@ -16,19 +17,12 @@ Hooks.once('ready', async () => {
     if (!game.settings.get(MODULE_ID, 'disableHUD')) await DHCardDeckHUD.create();
 });
 
-const debouncedControl = foundry.utils.debounce(async (token, controlled) => {
+const debouncedControl = foundry.utils.debounce(async () => {
     const hud = DHCardDeckHUD.instance;
     if (!hud) return;
-
-    const controlledTokens = canvas.tokens?.controlled || [];
-    
-    if (!controlled || !token?.actor || controlledTokens.length > 1) {
-        debouncedUpdate.cancel();
-        await hud.clearActor();
-        return;
-    }
-
-    await hud.setActor(token.actor, token);
+    debouncedUpdate.cancel();
+    const { actor, token } = getHUDActor();
+    await hud.setActor(actor, token);
 }, 100);
 
 const debouncedUpdate = foundry.utils.debounce(async object => {
@@ -40,12 +34,19 @@ async function refreshHUD(actor) {
     if (!actor) return;
 
     const hud = DHCardDeckHUD.instance;
-    if (!hud || hud.actor?.id !== actor.id) return;
+    const requested = hud?.requestedActor;
+    if (!requested || (requested.uuid ?? requested.id) !== (actor.uuid ?? actor.id)) return;
 
     await hud.createDeck();
 }
 
 Hooks.on('controlToken', debouncedControl);
+Hooks.on('canvasReady', debouncedControl);
+Hooks.on('deleteToken', debouncedControl);
+Hooks.on('deleteActor', debouncedControl);
+Hooks.on('updateUser', (user, changes) => {
+    if (user.id === game.user.id && Object.hasOwn(changes, 'character')) debouncedControl();
+});
 
 Hooks.on('updateActor', debouncedUpdate);
 Hooks.on('createItem', debouncedUpdate);
@@ -77,15 +78,6 @@ Hooks.on('renderSettingsConfig', (app, html) => {
         const deckBottomMargin = Number(event.target.value);
         DHCardDeckHUD.instance?.updateMarginPosition({deckBottomMargin});
         game.settings.set(MODULE_ID, 'deckBottomMargin', deckBottomMargin);
-    });
-
-    // Deck Between Margin Live Update
-    const betweenSlider = html.querySelector('range-picker[name="daggerheart-card-deck-hud.deckBetweenMargin"]');
-
-    betweenSlider?.addEventListener('input', event => {
-        const deckBetweenMargin = Number(event.target.value);
-        DHCardDeckHUD.instance?.updateMarginPosition({deckBetweenMargin});
-        game.settings.set(MODULE_ID, 'deckBetweenMargin', deckBetweenMargin);
     });
 
     // Card Overlap Live Update

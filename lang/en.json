@@ -1,6 +1,31 @@
 {
     "DHDECKCARD": {
         "SETTINGS": {
+            "HandSorting": {
+                "name": "Hand Sorting and Visibility",
+                "label": "Configure Hand",
+                "hint": "Choose visible card types and their order, separately for characters and NPCs. Saved per client.",
+                "instructions": "Drag rows or use the arrows to change the order. Check the card types to show. Changes apply when you save.",
+                "characters": "Characters",
+                "npcs": "Adversaries, Companions and Environments",
+                "moveUp": "Move up",
+                "moveDown": "Move down",
+                "reset": "Restore Defaults",
+                "save": "Save"
+            },
+            "HandView": {
+                "label": "Displayed Character Cards",
+                "hint": "Choose the cards shown in the hand. Prepare vault cards and equip items through their original documents.",
+                "options": {
+                    "loadout": "Readied Hand",
+                    "vault": "Vault",
+                    "equipment": "Unequipped Items"
+                }
+            },
+            "LockPosition": {
+                "label": "Lock Hand Position",
+                "hint": "In Free positioning mode, hold Alt and drag a card to move the whole hand. Enable this setting to lock the position."
+            },
             "DisableHUD": {
                 "label": "Disable Daggerheart: Card Deck HUD",
                 "hint": "Hide the HUD for you."
@@ -65,10 +90,6 @@
                 "label": "Bottom Margin",
                 "hint": "Space between the bottom and the deck."
             },
-            "DeckBetweenMargin": {
-                "label": "Between Margin",
-                "hint": "Space between the buttons and the deck."
-            },
             "PlayerToken": {
                 "label": "Use Character Token",
                 "hint": "Display Character Token picture instead of portrait."
@@ -103,19 +124,19 @@
             },
             "AutoHide": {
                 "label": "Auto Collapse Hand",
-                "hint": "Slide the hand down after the pointer leaves it. Hover a visible card edge or the controls to restore it."
+                "hint": "Slide the hand after the pointer leaves the cards. Hover a visible part of a card to restore the hand."
             },
             "AutoHideDelay": {
                 "label": "Auto Collapse Delay (seconds)",
-                "hint": "Time without hovering the hand before it slides down. Selected cards and an open hand menu keep it expanded."
+                "hint": "Time without hovering a card before the hand slides. Selected cards and dragging keep it expanded."
             },
             "AutoHideDistance": {
                 "label": "Auto Collapse Distance (pixels)",
-                "hint": "How far the cards slide down. A visible edge is always kept so the hand can be reopened."
+                "hint": "Exact vertical offset of the collapsed hand in pixels. Positive values move cards down; negative values move them up. Leave part of a card visible to reopen the hand by hovering."
             },
             "CardTheme": {
                 "label": "Card Theme",
-                "hint": "Choose card and hand control colors. Auto follows the Foundry interface theme.",
+                "hint": "Choose card colors. Auto follows the Foundry interface theme.",
                 "options": {
                     "auto": "Auto",
                     "dark": "Dark",
@@ -156,10 +177,6 @@
         "ERRORS": {
             "NoUse": "No Action or Feature attached to this card.",
             "PlayCard": "Could not use this card. See the console for details."
-        },
-        "TOOLTIP": {
-            "DragLock": "Drag to move. Right-click to lock/unlock.",
-            "SwitchTo": "Switch to {tab}"
         }
     },
     "DAGGERHEART": {

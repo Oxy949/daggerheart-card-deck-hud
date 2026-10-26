@@ -1,7 +1,31 @@
 import { MODULE_ID } from './constants';
 import { DHCardDeckHUD } from '../applications/daggerheart-card-deck-hud';
+import HandSorting from '../applications/hand-sorting';
 
 export function registerSettings() {
+    game.settings.registerMenu(MODULE_ID, 'handSorting', {
+        name: 'DHDECKCARD.SETTINGS.HandSorting.name',
+        label: 'DHDECKCARD.SETTINGS.HandSorting.label',
+        hint: 'DHDECKCARD.SETTINGS.HandSorting.hint',
+        icon: 'fa-solid fa-arrow-down-wide-short',
+        type: HandSorting,
+        restricted: false
+    });
+
+    game.settings.register(MODULE_ID, 'handView', {
+        name: 'DHDECKCARD.SETTINGS.HandView.label',
+        hint: 'DHDECKCARD.SETTINGS.HandView.hint',
+        scope: 'client',
+        config: true,
+        type: String,
+        choices: {
+            loadout: 'DHDECKCARD.SETTINGS.HandView.options.loadout',
+            vault: 'DHDECKCARD.SETTINGS.HandView.options.vault',
+            equipment: 'DHDECKCARD.SETTINGS.HandView.options.equipment'
+        },
+        default: 'loadout',
+        onChange: () => DHCardDeckHUD.instance?.createDeck()
+    });
     game.settings.register(MODULE_ID, 'disableHUD', {
         name: 'DHDECKCARD.SETTINGS.DisableHUD.label',
         hint: 'DHDECKCARD.SETTINGS.DisableHUD.hint',
@@ -62,7 +86,7 @@ export function registerSettings() {
         scope: 'client',
         config: true,
         type: Number,
-        range: { min: 0, max: 600, step: 10 },
+        range: { min: -600, max: 600, step: 1 },
         default: 180,
         onChange: () => DHCardDeckHUD.instance?.interactions?.refresh()
     });
@@ -111,10 +135,10 @@ export function registerSettings() {
     });
 
     game.settings.register(MODULE_ID, 'lockPosition', {
-        name: 'DHDECKCARD.SETTINGS.HideHotbar.label',
-        hint: 'DHDECKCARD.SETTINGS.HideHotbar.hint',
+        name: 'DHDECKCARD.SETTINGS.LockPosition.label',
+        hint: 'DHDECKCARD.SETTINGS.LockPosition.hint',
         scope: 'client',
-        config: false,
+        config: true,
         type: Boolean,
         default: false,
         onChange: value => DHCardDeckHUD.instance?.setLockPosition()
@@ -273,20 +297,6 @@ export function registerSettings() {
         default: 0
     });
     
-    game.settings.register(MODULE_ID, 'deckBetweenMargin', {
-        name: 'DHDECKCARD.SETTINGS.DeckBetweenMargin.label',
-        hint: 'DHDECKCARD.SETTINGS.DeckBetweenMargin.hint',
-        scope: 'client',
-        config: true,
-        type: Number,
-        range: {
-            min: -50,
-            max: 500,
-            step: 5
-        },
-        default: 0
-    });
-
     game.settings.register(MODULE_ID, 'directAction', {
         name: 'DHDECKCARD.SETTINGS.HideHotbar.label',
         hint: 'DHDECKCARD.SETTINGS.HideHotbar.hint',
@@ -324,14 +334,21 @@ export function registerSettings() {
         scope: 'client',
         config: false,
         type: Array,
-        default: []
+        default: [],
+        onChange: () => {
+            if (DHCardDeckHUD.instance?.isCharacter) return DHCardDeckHUD.instance.createDeck();
+        }
     });
 
     game.settings.register(MODULE_ID, 'itemTypesNPC', {
         scope: 'client',
         config: false,
         type: Array,
-        default: []
+        default: [],
+        onChange: () => {
+            const hud = DHCardDeckHUD.instance;
+            if (hud?.actor && !hud.isCharacter) return hud.createDeck();
+        }
     });
 
     game.settings.register(MODULE_ID, 'deckCustomPosition', {

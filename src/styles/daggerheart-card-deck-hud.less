@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,700;0,900;1,400;1,500;1,700;1,900&family=Nunito:ital,wght@0,400;0,500;0,700;0,900;1,400;1,500;1,700;1,900&family=Roboto:wght@300;400;500;700;900&display=swap');
 
 :is(#dh-card-deck, .dh-card-play-layer) {
-    --margin-bottom: 0.5rem;
     --hud-card-background: light-dark(#f5f1e8, #101217);
     --hud-card-text: light-dark(#252238, #efe6d8);
     --hud-panel-background: light-dark(#efe6d8, #18162e);
@@ -57,11 +56,6 @@
         &.position-right {
             position: absolute;
             right: var(--borderMargin);
-
-            .dh-cd-control-settings-menu {
-                left: unset;
-                right: 100%;
-            }
         }
 
         &.position-custom {
@@ -77,36 +71,29 @@
         margin-bottom: var(--bottomMargin);
     }
 
-    &.is-hidden {
-        .dh-cd-controls {
-            .dh-cd-control-toggle i {
-                transform: rotate(180deg);
-            }
-
-            > *:not(.dh-cd-control-toggle) {
-                opacity: 0;
-            }
-        }
-    }
-
     &.is-auto-collapsed .dh-cd-cards {
-        // Always leave a visible edge that can be hovered to reopen the hand.
-        --dh-cd-auto-hide-offset: min(var(--auto-hide-distance), max(0px, calc(100% - 1.5rem)));
+        --dh-cd-auto-hide-offset: var(--auto-hide-distance, 0px);
     }
 
-    &[data-lock-position="true"] {
-        button.dh-cd-control-move {
-            cursor: unset;
-
-            &::before {
-                content: '\f023';
-            }
-        }
+    &:not(.is-auto-collapsed):not(.is-expanding):not(.is-switching-actors) .dh-cd-cards .dh-card-wrapper:not(.selected):has(.hover-layout:hover) {
+        --hover-y: var(--hover-y-value);
+        --hover-scale: var(--hover-scale-value);
+        --base-z: 500 !important;
     }
 
-    .dh-card-wrapper,
-    .dh-cd-controls {
+    .dh-card-wrapper {
         pointer-events: auto;
+    }
+
+    &.is-switching-actors {
+        .dh-cd-cards {
+            opacity: 0;
+            transition: none;
+        }
+
+        .dh-card-wrapper {
+            pointer-events: none;
+        }
     }
 
     .overflow-y {
@@ -126,10 +113,9 @@
         --fade-orientation: to top;
         
         position: relative;
-        margin-bottom: var(--betweenMargin);
         opacity: 1;
 
-        transform: translateY(calc(var(--dh-cd-hide-offset, 0px) + var(--dh-cd-auto-hide-offset, 0px)));
+        transform: translateY(var(--dh-cd-auto-hide-offset, 0px));
         transition: transform 0.3s ease, height 0.3s ease, top 0.3s ease;
 
         &.flat {
@@ -187,12 +173,6 @@
             }
 
             &:not(.selected) {
-                &:has(.hover-layout:hover) {
-                    --hover-y: var(--hover-y-value);
-                    --hover-scale: var(--hover-scale-value);
-                    --base-z: 500 !important;
-                }
-
                 .dh-card-description {
                     overflow: hidden;
                 }
@@ -233,29 +213,6 @@
                 .dh-card {
                     mask-image: none;
                 }
-            }
-
-            .card-buttons {
-                position: absolute;
-                top: 0;
-                left: 100%;
-                margin-left: 2px;
-                display: flex;
-                flex-direction: column;
-                gap: 0.05rem;
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity 0.1s ease-in;
-
-                button {
-                    font-size: var(--font-size-8);
-                    padding: 0 0.25rem;
-                }
-            }
-
-            &.show-actions .card-buttons {
-                opacity: 1;
-                pointer-events: auto;
             }
 
             .hover-layout {
@@ -390,171 +347,6 @@
         }
     }
 
-    .dh-cd-controls {
-        display: flex;
-        gap: 0.5rem;
-        margin: 0 0 var(--margin-bottom);
-        z-index: 100;
-        position: relative;
-        height: auto;
-        min-width: 5rem;
-        width: 100%;
-        justify-content: center;
-
-        > * {
-            transition: opacity 0.2s ease;
-        }
-
-        button {
-            font-size: 1rem;
-            cursor: pointer;
-            align-self: end;
-            background: var(--hud-panel-background);
-            color: var(--hud-card-text);
-            border-color: var(--color-border);
-
-            &[disabled] {
-                cursor: not-allowed;
-            }
-        }
-
-        .dh-cd-control-switch {
-            font-weight: 600;
-        }
-
-        .dh-cd-control-toggle i {
-            transition: transform 0.2s ease;
-        }
-
-        .dh-cd-control-move {
-            cursor: grab;
-
-            &.active {
-                cursor: grabbing;
-            }
-        }
-
-        .dh-cd-resources {
-            display: flex;
-            gap: 1rem;
-            margin: 0 3rem;
-        }
-
-        .dh-cd-player {
-            display: flex;
-            gap: 0.5rem;
-            margin: 0 3rem;
-            align-items: center;
-
-            .dh-cd-player-resource {
-                display: flex;
-                flex-direction: column;
-                gap: 0.5rem;
-                justify-content: space-around;
-            }
-
-            .dh-cd-player-img {
-                aspect-ratio: 1;
-                position: relative;
-                cursor: pointer;
-                border-radius: 50%;
-                overflow: hidden;
-                max-height: 6rem;
-
-                &::before {
-                    content: ' ';
-                    position: absolute;
-                    inset: 0;
-                    top: var(--hp-perc);
-                    background-color: rgba(255,0,0,0.5);
-                }
-            }
-        }
-
-        .status-bar {
-            color: black;
-            display: flex;
-            align-items: center;
-            justify-content: end;
-            gap: 0.25rem;
-            cursor: pointer;
-
-            i {
-                color: var(--color-border);
-            }
-
-            .status-value, .status-value input[type='number'].bar-input {
-                font-size: var(--font-size-16);
-                height: 1.5rem;
-            }
-
-            .status-label.pointy {
-                clip-path: path('M79 22H0L5 5.5L40 0L75 5.5L79 22Z');
-                margin-bottom: -4px;
-
-                h4 {
-                    line-height: 1.5rem;
-                }
-            }
-        }
-
-        &[data-menu-open] {
-            .dh-cd-control-settings-menu {
-                display: flex;
-            }
-        }
-    }
-
-    .dh-cd-control-settings-menu {
-        display: none;
-        flex-direction: column;
-        position: absolute;
-        left: 100%;
-        bottom: 0;
-        background-color: var(--hud-panel-background);
-        padding: 0.5rem 1rem;
-        font-size: var(--font-size-16);
-        margin-left: 0.5rem;
-        white-space: nowrap;
-        border-radius: 0.2rem;
-        box-shadow:
-            0 0.4rem 1rem rgba(0, 0, 0, 0.45),
-            0 0 0.25rem rgba(0, 0, 0, 0.3);
-        z-index: 101;
-
-        label {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            cursor: pointer;
-            pointer-events: auto;
-            padding: 0.25rem 0;
-
-            &:not(:first-child) {
-                padding-top: 0.25rem;
-            }
-
-            &:not([hidden]) {
-                border-bottom: 1px dashed;
-                padding-bottom: 0.25rem;
-            }
-
-            &:not([hidden]):not(:has(~ label:not([hidden]))) {
-                border-bottom: none;
-                padding-bottom: 0;
-            }
-
-            span {
-                flex: 1;
-            }
-
-            i {
-                cursor: move;
-            }
-        }
-    }
-
     &.dh-card-play-layer {
         position: fixed;
         inset: 0;
@@ -592,9 +384,49 @@
 
 @media (prefers-reduced-motion: reduce) {
     :is(#dh-card-deck, .dh-card-play-layer) {
-        &, .dh-cd-cards, .dh-card-wrapper, .card-buttons, .dh-card-play-hint {
+        &, .dh-cd-cards, .dh-card-wrapper, .dh-card-play-hint {
             transition-duration: 0s !important;
         }
+    }
+}
+
+.dh-hand-sorting {
+    .hand-sorting-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .hand-sorting-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        max-height: 65vh;
+        overflow-y: auto;
+    }
+
+    .hand-type-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+
+        li {
+            display: grid;
+            grid-template-columns: 1rem 1fr 2rem 2rem;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.35rem 0;
+
+            > i { cursor: grab; }
+            label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+            button { padding: 0.25rem; }
+        }
+    }
+
+    .form-footer {
+        display: flex;
+        gap: 0.5rem;
+        button { flex: 1; }
     }
 }
 

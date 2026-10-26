@@ -1,0 +1,31 @@
+<div class="hand-sorting-content">
+    <p class="hint">{{localize 'DHDECKCARD.SETTINGS.HandSorting.instructions'}}</p>
+    <div class="hand-sorting-groups">
+        {{#each groups}}
+        <fieldset data-type-setting="{{setting}}">
+            <legend>{{localize label}}</legend>
+            <ol class="hand-type-list">
+                {{#each items}}
+                <li data-item-type="{{type}}" draggable="true">
+                    <i class="fa-solid fa-grip-vertical" aria-hidden="true"></i>
+                    <label>
+                        <input type="checkbox" name="{{../setting}}.{{type}}" {{#if active}}checked{{/if}}>
+                        <span>{{label}}</span>
+                    </label>
+                    <button type="button" data-action="moveTypeUp" title="{{localize 'DHDECKCARD.SETTINGS.HandSorting.moveUp'}}" aria-label="{{localize 'DHDECKCARD.SETTINGS.HandSorting.moveUp'}}">
+                        <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" data-action="moveTypeDown" title="{{localize 'DHDECKCARD.SETTINGS.HandSorting.moveDown'}}" aria-label="{{localize 'DHDECKCARD.SETTINGS.HandSorting.moveDown'}}">
+                        <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+                    </button>
+                </li>
+                {{/each}}
+            </ol>
+        </fieldset>
+        {{/each}}
+    </div>
+    <footer class="form-footer">
+        <button type="button" data-action="resetOrder">{{localize 'DHDECKCARD.SETTINGS.HandSorting.reset'}}</button>
+        <button type="submit">{{localize 'DHDECKCARD.SETTINGS.HandSorting.save'}}</button>
+    </footer>
+</div>
