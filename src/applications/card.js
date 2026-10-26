@@ -29,6 +29,9 @@ export default class DHCard {
 
         this.#selected = value;
         this.element?.classList.toggle('selected', value);
+        if (value && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            this.element?.classList.add('show-actions');
+        }
         if (!value) this.element?.classList.remove('show-actions');
     }
 
@@ -305,8 +308,8 @@ export default class DHCard {
     }
 
     async use(event) {
-        if (this.item.system?.actionsList) this.item.use(event);
-        else if (this.item.id === this.actor.system.attack?.id) this.actor.system.attack.use(event);
+        if (this.item.system?.actionsList) await this.item.use(event);
+        else if (this.item.id === this.actor.system.attack?.id) await this.actor.system.attack.use(event);
         else {
             const count = this.features.reduce((acc, feature) => acc + (feature.system.actions.size > 0 ? 1 : 0), 0);
             if (count) {
@@ -315,7 +318,7 @@ export default class DHCard {
                     // Feature Selection Dialog
                     feature = await FeatureSelectionDialog.create(this, event);
                 }
-                if (feature) feature.use(event);
+                if (feature) await feature.use(event);
             } else ui.notifications.warn('DHDECKCARD.ERRORS.NoUse', { localize: true });
         }
 

@@ -17,6 +17,10 @@
                     "flat": "Flat"
                 }
             },
+            "DeckCurvature": {
+                "label": "Hand Curvature (%)",
+                "hint": "Adjust the curve and rotation of the card fan. 0 is flat, 100 is the original curve, 200 doubles it. Applies to the Curved deck style."
+            },
             "FrontPosition": {
                 "label": "Front Card Position",
                 "hint": "Choose whether the first, middle, or last card is displayed in front of the others.",
@@ -91,11 +95,36 @@
             },
             "HoverScale": {
                 "label": "Card Hover scale",
-                "hint": "Control how much card scales up when hovered."
+                "hint": "Control how much a card scales up when hover enlargement is enabled. 1 keeps its original size."
+            },
+            "HoverScaleEnabled": {
+                "label": "Enlarge Cards on Hover",
+                "hint": "Enable card enlargement when the pointer is over a card."
             },
             "AutoHide": {
-                "label": "Auto Hide Deck",
-                "hint": "Automatically hide the deck when not hovered."
+                "label": "Auto Collapse Hand",
+                "hint": "Slide the hand down after the pointer leaves it. Hover a visible card edge or the controls to restore it."
+            },
+            "AutoHideDelay": {
+                "label": "Auto Collapse Delay (seconds)",
+                "hint": "Time without hovering the hand before it slides down. Selected cards and an open hand menu keep it expanded."
+            },
+            "AutoHideDistance": {
+                "label": "Auto Collapse Distance (pixels)",
+                "hint": "How far the cards slide down. A visible edge is always kept so the hand can be reopened."
+            },
+            "CardTheme": {
+                "label": "Card Theme",
+                "hint": "Choose card and hand control colors. Auto follows the Foundry interface theme.",
+                "options": {
+                    "auto": "Auto",
+                    "dark": "Dark",
+                    "light": "Light"
+                }
+            },
+            "DragToPlay": {
+                "label": "Drag Cards to Play",
+                "hint": "Drag a card out of the hand and release it over the game canvas to use its action. Escape or dropping over the interface returns it to the hand. Vault and unequipped cards must be readied first."
             },
             "SelectedCardScale": {
                 "label": "Selected Card Scale",
@@ -117,14 +146,16 @@
                 "primary": "Primary",
                 "secondary": "Secondary"
             },
-            "Deck": "Deck"
+            "Deck": "Deck",
+            "DragToPlay": "Release to play · Escape to cancel"
         },
         "DIALOG": {
             "selectFeature": "Feature Selection",
             "selectAdversary": "Potential Adversaries"
         },
         "ERRORS": {
-            "NoUse": "No Action or Feature attached to this card."
+            "NoUse": "No Action or Feature attached to this card.",
+            "PlayCard": "Could not use this card. See the console for details."
         },
         "TOOLTIP": {
             "DragLock": "Drag to move. Right-click to lock/unlock.",

@@ -42,7 +42,53 @@ export function registerSettings() {
         config: true,
         type: Boolean,
         default: false,
-        onChange: value => DHCardDeckHUD.instance?.parts?.deck?.classList.toggle('auto-hide', value)
+        onChange: () => DHCardDeckHUD.instance?.interactions?.refresh()
+    });
+
+    game.settings.register(MODULE_ID, 'autoHideDelay', {
+        name: 'DHDECKCARD.SETTINGS.AutoHideDelay.label',
+        hint: 'DHDECKCARD.SETTINGS.AutoHideDelay.hint',
+        scope: 'client',
+        config: true,
+        type: Number,
+        range: { min: 0, max: 30, step: 0.5 },
+        default: 3,
+        onChange: () => DHCardDeckHUD.instance?.interactions?.refresh()
+    });
+
+    game.settings.register(MODULE_ID, 'autoHideDistance', {
+        name: 'DHDECKCARD.SETTINGS.AutoHideDistance.label',
+        hint: 'DHDECKCARD.SETTINGS.AutoHideDistance.hint',
+        scope: 'client',
+        config: true,
+        type: Number,
+        range: { min: 0, max: 600, step: 10 },
+        default: 180,
+        onChange: () => DHCardDeckHUD.instance?.interactions?.refresh()
+    });
+
+    game.settings.register(MODULE_ID, 'cardTheme', {
+        name: 'DHDECKCARD.SETTINGS.CardTheme.label',
+        hint: 'DHDECKCARD.SETTINGS.CardTheme.hint',
+        scope: 'client',
+        config: true,
+        type: String,
+        choices: {
+            auto: 'DHDECKCARD.SETTINGS.CardTheme.options.auto',
+            dark: 'DHDECKCARD.SETTINGS.CardTheme.options.dark',
+            light: 'DHDECKCARD.SETTINGS.CardTheme.options.light'
+        },
+        default: 'auto',
+        onChange: () => DHCardDeckHUD.instance?.interactions?.refresh()
+    });
+
+    game.settings.register(MODULE_ID, 'dragToPlay', {
+        name: 'DHDECKCARD.SETTINGS.DragToPlay.label',
+        hint: 'DHDECKCARD.SETTINGS.DragToPlay.hint',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: true
     });
     
     game.settings.register(MODULE_ID, 'deckPosition', {
@@ -86,10 +132,20 @@ export function registerSettings() {
         },
         default: 'curved',
         onChange: value => {
-            const deckElement = DHCardDeckHUD.instance?.deck?.element;
-            deckElement?.classList.toggle('flat', value === 'flat');
-            setTimeout(() => DHCardDeckHUD.instance?.deck?._setDeckSize(), 200);
+            DHCardDeckHUD.instance?.deck?.element?.classList.toggle('flat', value === 'flat');
+            DHCardDeckHUD.instance?.deck?.updateCardPosition();
         }
+    });
+
+    game.settings.register(MODULE_ID, 'deckCurvature', {
+        name: 'DHDECKCARD.SETTINGS.DeckCurvature.label',
+        hint: 'DHDECKCARD.SETTINGS.DeckCurvature.hint',
+        scope: 'client',
+        config: true,
+        type: Number,
+        range: { min: 0, max: 200, step: 5 },
+        default: 100,
+        onChange: () => DHCardDeckHUD.instance?.deck?.updateCardPosition()
     });
     
     game.settings.register(MODULE_ID, 'frontPosition', {
@@ -149,6 +205,16 @@ export function registerSettings() {
         onChange: value => DHCardDeckHUD.instance?.parts?.deck?.style.setProperty('--hover-y-value', `${value * -1}rem`)
     });
     
+    game.settings.register(MODULE_ID, 'hoverScaleEnabled', {
+        name: 'DHDECKCARD.SETTINGS.HoverScaleEnabled.label',
+        hint: 'DHDECKCARD.SETTINGS.HoverScaleEnabled.hint',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: true,
+        onChange: () => DHCardDeckHUD.instance?.deck?.setVarStyle()
+    });
+
     game.settings.register(MODULE_ID, 'hoverScale', {
         name: 'DHDECKCARD.SETTINGS.HoverScale.label',
         hint: 'DHDECKCARD.SETTINGS.HoverScale.hint',
@@ -161,7 +227,7 @@ export function registerSettings() {
             step: 0.1
         },
         default: 1.1,
-        onChange: value => DHCardDeckHUD.instance?.parts?.deck?.style.setProperty('--hover-scale-value', value)
+        onChange: () => DHCardDeckHUD.instance?.deck?.setVarStyle()
     });
     
     game.settings.register(MODULE_ID, 'selectedCardScale', {

@@ -11,7 +11,7 @@ export default class DHDeck {
     }
 
     get size() {
-        return this.cards.length;
+        return this.cards.size;
     }
 
     get classes() {
@@ -20,7 +20,6 @@ export default class DHDeck {
         if (this.actor.system.activeBeastform) classes.push('beastform');
         if (game.settings.get(MODULE_ID, 'hideDescription')) classes.push('description-hidden');
         if (game.settings.get(MODULE_ID, 'invertGradient')) classes.push('invert-gradient');
-        if (game.settings.get(MODULE_ID, 'autoHide')) classes.push('auto-hide');
         return classes;
     }
 
@@ -247,13 +246,16 @@ export default class DHDeck {
             card,
             game.settings.get(MODULE_ID, 'frontPosition')
         ));
+        this._setDeckSize();
     }
 
     getCardStyle(count, card, frontCardPosition = 'last') {
         const index = card.index;
         const spacing = this.element.dataset.cardOverlap || game.settings.get(MODULE_ID, 'cardOverlap') || 55;
-        const maxRotation = 14;
-        const maxCurve = 45;
+        const curvature = game.settings.get(MODULE_ID, 'deckStyle') === 'flat' ? 0
+            : game.settings.get(MODULE_ID, 'deckCurvature') / 100;
+        const maxRotation = 14 * curvature;
+        const maxCurve = 45 * curvature;
         const center = (count - 1) / 2;
         const offset = index - center;
         const normalized = count > 1 ? offset / center : 0;
@@ -262,8 +264,7 @@ export default class DHDeck {
         const translateX = offset * spacing - this.parent.cardWidth / 2;
 
         // Vertical curve
-        const curveNormalized = count === 2 ? normalized * Math.sqrt(20 / maxCurve) : normalized;
-        const translateY = curveNormalized ** 2 * maxCurve;
+        const translateY = normalized ** 2 * (count === 2 ? 20 * curvature : maxCurve);
 
         // Rotation
         const rotate = normalized * maxRotation;
@@ -328,27 +329,29 @@ export default class DHDeck {
     }
 
     _setDeckSize() {
-        const cards = [...this.element.querySelectorAll('.dh-card')];
-        if (cards.length) {
-            const bounds = cards.reduce((bounds, card) => {
-                const rect = card.getBoundingClientRect();
-
-                bounds.left = Math.min(bounds.left, rect.left);
-                bounds.top = Math.min(bounds.top, rect.top);
-                bounds.right = Math.max(bounds.right, rect.right);
-                bounds.bottom = Math.max(bounds.bottom, rect.bottom);
-
-                return bounds;
-            }, {
-                left: Infinity,
-                top: Infinity,
-                right: -Infinity,
-                bottom: -Infinity
-            });
-
-            this.element.style.width = `${bounds.right - bounds.left}px`;
-            this.element.style.height = `${bounds.bottom - bounds.top}px`;
+        if (!this.element) return;
+        // Measure the resting layout, independent of hover, selection and slide animations.
+        const cardWidth = this.parent.cardWidth;
+        const cardHeight = cardWidth * 7 / 5;
+        let minX = -cardWidth / 2;
+        let maxX = cardWidth / 2;
+        let maxY = 0;
+        for (const card of this.cards.values()) {
+            const style = card.element.style;
+            const x = parseFloat(style.getPropertyValue('--translate-x')) || 0;
+            const y = parseFloat(style.getPropertyValue('--translate-y')) || 0;
+            const angle = (parseFloat(style.getPropertyValue('--rotate')) || 0) * Math.PI / 180;
+            for (const dx of [-cardWidth / 2, cardWidth / 2]) {
+                for (const dy of [-cardHeight, 0]) {
+                    const rotatedX = x + cardWidth / 2 + dx * Math.cos(angle) - dy * Math.sin(angle);
+                    minX = Math.min(minX, rotatedX);
+                    maxX = Math.max(maxX, rotatedX);
+                    maxY = Math.max(maxY, y + cardHeight + dx * Math.sin(angle) + dy * Math.cos(angle));
+                }
+            }
         }
+        this.element.style.width = `${maxX - minX}px`;
+        this.element.style.height = `${this.cards.size ? maxY : 0}px`;
     }
 
     applyGradient(value) {
@@ -366,7 +369,9 @@ export default class DHDeck {
 
     setVarStyle() {
         this.element.style.setProperty('--hover-y-value', `${game.settings.get(MODULE_ID, 'hoverY') * -1}rem`);
-        this.element.style.setProperty('--hover-scale-value', game.settings.get(MODULE_ID, 'hoverScale'));
+        const hoverScale = game.settings.get(MODULE_ID, 'hoverScaleEnabled')
+            ? game.settings.get(MODULE_ID, 'hoverScale') : 1;
+        this.element.style.setProperty('--hover-scale-value', hoverScale);
         this.element.style.setProperty('--selected-scale', `${game.settings.get(MODULE_ID, 'selectedCardScale')}`);
     }
 }

@@ -1,11 +1,14 @@
 import { MODULE_ID } from '../system/constants';
 import DHDeck from './deck';
+import HandInteractions from './hand-interactions';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     static instance = null;
     deck = null;
+    interactions = null;
+    #listeners = new AbortController();
     #dragData = null;
     #isCollapsed = false;
     isVault = false;
@@ -81,13 +84,17 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
 
         const instance = this.instance;
         this.instance = null;
-        instance.element?.remove();
+        await instance.close({ animate: false });
     }
 
     async _onClose(options) {
+        this.interactions?.dispose();
+        this.#listeners.abort();
+        document.removeEventListener('pointermove', this.#onDragMove);
+        document.removeEventListener('pointerup', this.#onDragEnd);
         await super._onClose(options);
 
-        DHCardDeckHUD.instance = null;
+        if (DHCardDeckHUD.instance === this) DHCardDeckHUD.instance = null;
     }
 
     get actor() {
@@ -139,13 +146,14 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
 
         this.element.style.setProperty('--card-width', `${this.cardWidth}px`);
         this.setLockPosition();
+        this.interactions = new HandInteractions(this);
 
         ['click', 'contextmenu'].forEach(eventType => {
             document.addEventListener(eventType, event => {
                 if (this.deck?.cards) this._selectCard();
                 if (!this.parts.controls.hasAttribute('data-menu-open') || event.target.closest('.dh-cd-control-settings-menu')) return;
                 this._toggleMenu(event);
-            });
+            }, { signal: this.#listeners.signal });
         });
     }
 
@@ -154,7 +162,8 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         if (!this.#actor) return;
 
         if (options.parts?.includes('deck')) {
-            this.parts.deck.replaceChildren(...this.deck.cards.values().map(card => card.element));
+            this.interactions?.reset();
+            this.parts.deck.replaceChildren(...[...this.deck.cards.values()].map(card => card.element));
             this.deck._setDeckSize();
 
             for (const card of this.deck.cards.values()) {
@@ -173,13 +182,15 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
                 });
                 
                 card.element.addEventListener('transitionend', event => {
-                    if (event.propertyName !== 'transform') return;
+                    if (event.target !== card.element || event.propertyName !== 'transform') return;
                     if (card.selected) card.element.classList.add('show-actions');
                 });
             }
             this.deck.applyGradient(game.settings.get(MODULE_ID, 'cardGradient'));
             this.deck.setVarStyle();
         }
+
+        this.interactions?.refresh();
 
         this.updateMarginPosition();
 
@@ -265,6 +276,9 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     async clearActor() {
+        this.interactions?.reset();
+        this.#isCollapsed = false;
+        this.element.classList.remove('is-hidden');
         this.#actor = null;
         this.#token = null;
         this.deck = null;
@@ -274,6 +288,7 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     async createDeck() {
+        this.interactions?.reset();
         this.deck = await DHDeck.create(this.#actor, this);
         await this.render({ parts: ['deck', 'controls'] });
     }
@@ -291,8 +306,7 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         return context;
     }
 
-    async _prepareDeckContext(partId, context, options) {
-        context = await super._preparePartContext(partId, context, options);
+    _prepareDeckContext(context, options) {
         if (!this.#actor) return context;
         context.classes = this.deck.classes;
         context.cardCount = this.deck.cards.size;
@@ -327,22 +341,25 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     static async #toggleHUD() {
+        this.interactions?.reset();
         this.#isCollapsed = !this.#isCollapsed;
 
         const deck = this.parts.deck;
         const marginSetting = game.settings.get(MODULE_ID, 'deckBottomMargin');
-        let offset = marginSetting;
+        let offset = '0px';
 
         if (!deck) return;
 
         if (this.#isCollapsed) {
             const rect = deck.getBoundingClientRect();
-            offset = `calc(${window.innerHeight - rect.top}px + 1rem + ${marginSetting}px)`;
+            const transform = new DOMMatrixReadOnly(getComputedStyle(deck).transform);
+            offset = `calc(${window.innerHeight - rect.top + transform.m42}px + 1rem + ${marginSetting}px)`;
         }
 
         deck.style.setProperty('--dh-cd-hide-offset', offset);
 
         this.element.classList.toggle('is-hidden', this.#isCollapsed);
+        this.interactions?.schedule();
     }
 
     static async #toggleMenu(event) {
@@ -353,6 +370,8 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
         event.preventDefault();
         event.stopPropagation();
         this.parts.controls.toggleAttribute('data-menu-open');
+        this.interactions?.reveal();
+        this.interactions?.schedule();
     }
 
     static async #toggleItemType(event, target) {
@@ -381,7 +400,8 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     static #useCard(event, target) {
-        const { cardId } = target.closest('[data-card-id').dataset;
+        event.stopPropagation();
+        const { cardId } = target.closest('[data-card-id]').dataset;
         const card = this.deck.cards.get(cardId);
 
         if (!card.isLocked && this.isEquipment && card.item.system.equipped === false) return card.toggleEquipped();
@@ -396,9 +416,18 @@ export class DHCardDeckHUD extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     _selectCard(card) {
+        if (!this.deck) return;
+        let changed = Boolean(card);
         if (card) card.toggleSelected();
         for (const otherCard of this.deck.cards.values()) {
-            if (otherCard !== card && otherCard.selected) otherCard.selected = false;
+            if (otherCard !== card && otherCard.selected) {
+                otherCard.selected = false;
+                changed = true;
+            }
+        }
+        if (changed) {
+            this.interactions?.reveal();
+            this.interactions?.schedule();
         }
     }
 

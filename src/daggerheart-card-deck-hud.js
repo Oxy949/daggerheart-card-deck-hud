@@ -56,6 +56,11 @@ Hooks.on('deleteActiveEffect', debouncedUpdate);
 Hooks.on('renderSettingsConfig', (app, html) => {
     if (!DHCardDeckHUD.instance) return;
 
+    for (const setting of ['autoHideDelay', 'autoHideDistance', 'deckCurvature', 'hoverY', 'hoverScale', 'selectedCardScale']) {
+        const slider = html.querySelector(`range-picker[name="${MODULE_ID}.${setting}"]`);
+        slider?.addEventListener('input', event => game.settings.set(MODULE_ID, setting, Number(event.target.value)));
+    }
+
     // Deck Border Margin Live Update
     const borderSlider = html.querySelector('range-picker[name="daggerheart-card-deck-hud.deckBorderMargin"]');
 

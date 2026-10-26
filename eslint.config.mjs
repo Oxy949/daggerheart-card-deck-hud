@@ -39,7 +39,7 @@ export const stylisticRules = {
 export default defineConfig([
     globalIgnores(['dist/**/*', 'build.mjs']),
     {
-        files: ['build.mjs'],
+        files: ['build.mjs', 'playwright.config.cjs', 'tests/*.cjs'],
         languageOptions: { globals: globals.node }
     },
     {
