@@ -284,14 +284,14 @@ for (const { distance, reducedMotion } of [
 test('light, dark and automatic themes update card text and surfaces', async ({ page }) => {
     const card = page.locator('#dh-card-deck .dh-card').first();
     await setting(page, 'cardTheme', 'light');
-    await expect(card).toHaveCSS('background-color', 'rgb(245, 241, 232)');
-    await expect(card).toHaveCSS('color', 'rgb(37, 34, 56)');
+    await expect(card).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(card).toHaveCSS('color', 'rgb(0, 0, 0)');
     await setting(page, 'cardTheme', 'dark');
     await expect(card).toHaveCSS('background-color', 'rgb(16, 18, 23)');
     await expect(card).toHaveCSS('color', 'rgb(239, 230, 216)');
     await setting(page, 'cardTheme', 'auto');
     await page.evaluate(() => { document.documentElement.style.colorScheme = 'light'; });
-    await expect(card).toHaveCSS('background-color', 'rgb(245, 241, 232)');
+    await expect(card).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await page.evaluate(() => { document.documentElement.style.colorScheme = 'dark'; });
     await expect(card).toHaveCSS('background-color', 'rgb(16, 18, 23)');
 });

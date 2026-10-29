@@ -11,10 +11,12 @@ async function start() {
     const source = await fs.readFile('src/styles/daggerheart-card-deck-hud.less', 'utf8');
     const style = await less.render(source);
     const html = await fs.readFile('tests/fixture.html', 'utf8');
+    const font = await fs.readFile('assets/fonts/Roboto-Variable.ttf');
     const routes = new Map([
         ['/', ['text/html', html]],
         ['/fixture.js', ['text/javascript', script.outputFiles[0].text]],
-        ['/module.css', ['text/css', style.css]]
+        ['/module.css', ['text/css', style.css]],
+        ['/modules/daggerheart-card-deck-hud/assets/fonts/Roboto-Variable.ttf', ['font/ttf', font]]
     ]);
     http.createServer((request, response) => {
         const route = routes.get(request.url);
