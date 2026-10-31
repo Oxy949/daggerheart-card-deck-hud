@@ -41,18 +41,17 @@ export function onHudActionUse(action, config) {
     const max = resourceMaximum(item);
     if (!Number.isFinite(max) || max < 1) {
         ui.notifications.warn('DHDECKCARD.ERRORS.ReloadMissingResource', { localize: true });
-        return false;
+        return;
     }
 
-    // The native character sheet uses the same resource field to toggle loaded/unloaded.
-    // preUseAction is synchronous; cancel the display-only action, then update the Item.
+    // Post-use fires after the action workflow and its resource costs, including Stress.
+    // This restores the weapon without cancelling its normal effects or chat message.
     void item.update({ 'system.resource.value': max }).catch(error => {
         console.error('daggerheart-card-deck-hud | Could not reload weapon', error);
         ui.notifications.error('DHDECKCARD.ERRORS.ReloadFailed', { localize: true });
     });
-    return false;
 }
 
 export function registerReloadAction() {
-    Hooks.on(`${CONFIG.DH?.id ?? 'daggerheart'}.preUseAction`, onHudActionUse);
+    Hooks.on(`${CONFIG.DH?.id ?? 'daggerheart'}.postUseAction`, onHudActionUse);
 }
