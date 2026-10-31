@@ -176,7 +176,9 @@
         },
         "ERRORS": {
             "NoUse": "No Action or Feature attached to this card.",
-            "PlayCard": "Could not use this card. See the console for details."
+            "PlayCard": "Could not use this card. See the console for details.",
+            "ReloadMissingResource": "This weapon has no valid maximum reload resource.",
+            "ReloadFailed": "Could not reload this weapon. See the console for details."
         }
     },
     "DAGGERHEART": {
