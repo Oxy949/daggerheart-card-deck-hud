@@ -1,4 +1,5 @@
 import FeatureSelectionDialog from './dialogs/feature-selection-dialog';
+import { markHudUseEvent } from '../system/reloading';
 
 const embedTemplates = new Map([
     ['class', 'systems/daggerheart/templates/components/card/subclass.hbs'],
@@ -321,6 +322,7 @@ export default class DHCard {
     }
 
     async use(event) {
+        markHudUseEvent(event);
         const customAction = this.item.noButton && typeof this.item.use === 'function';
         if (typeof this.item.use === 'function' && (this.#hasActions(this.item) || customAction)) {
             await this.item.use(event);
