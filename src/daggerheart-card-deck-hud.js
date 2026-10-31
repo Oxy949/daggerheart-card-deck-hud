@@ -3,10 +3,12 @@ import { registerSettings } from './system/settings';
 import { preloadHandlebarsTemplates } from './system/handlebars';
 import { MODULE_ID } from './system/constants';
 import { getHUDActor } from './system/actor-selection';
+import { registerReloadAction } from './system/reloading';
 
 Hooks.once('init', async () => {
     preloadHandlebarsTemplates();
     registerSettings();
+    registerReloadAction();
 });
 
 Hooks.once('ready', async () => {
